@@ -93,7 +93,7 @@ const ICON = {
 };
 
 const NAV_ITEMS = [
-  { key: "dashboard", label: "Dasbor", href: "dashboard.html", roles: ["admin", "dosen", "mahasiswa"], icon: ICON.home },
+  { key: "dashboard", label: "Dashboard", href: "dashboard.html", roles: ["admin", "dosen", "mahasiswa"], icon: ICON.home },
   { key: "mahasiswa", label: "Data Mahasiswa", href: "mahasiswa.html", roles: ["admin"], icon: ICON.users },
   { key: "dosen", label: "Data Dosen", href: "dosen.html", roles: ["admin"], icon: ICON.idcard },
   { key: "staf", label: "Data Staf", href: "staf.html", roles: ["admin"], icon: ICON.briefcase },
@@ -129,7 +129,7 @@ const Shell = {
         <div class="sidebar-brand">
           <div class="crest">BI</div>
           <div>
-            <div class="name">Buku Induk</div>
+            <div class="name">Portal Akademik</div>
             <div class="sub">Adm. Perkantoran</div>
           </div>
         </div>
