@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Input Nilai — Buku Induk</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<div id="page-root" hidden>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <h3>Input Nilai Mata Kuliah</h3>
+        <div class="desc">Pilih mata kuliah dan periode, lalu masukkan nilai per komponen untuk setiap mahasiswa. Nilai Akhir &amp; huruf terhitung otomatis.</div>
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="field full">
+        <label>Mata Kuliah</label>
+        <select id="selMk"><option value="">— Pilih mata kuliah —</option></select>
+      </div>
+      <div class="field">
+        <label>Tahun Ajaran</label>
+        <input type="text" id="selTahun" placeholder="contoh: 2025/2026">
+      </div>
+      <div class="field">
+        <label>Mahasiswa Mengambil di Semester Ke-</label>
+        <input type="number" id="selSemester" min="1" max="14">
+      </div>
+    </div>
+    <div class="weight-chip" id="bobotChip" style="margin-top:4px;">Memuat bobot...</div>
+  </div>
+
+  <div class="card" id="cardTabel" style="display:none;">
+    <div class="card-head">
+      <div>
+        <h3 id="judulMk">—</h3>
+        <div class="desc" id="subJudulMk"></div>
+      </div>
+      <div class="card-tools">
+        <button class="btn btn-brass btn-sm" id="btnSimpanSemua">Simpan Semua Perubahan</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="ledger">
+        <thead>
+          <tr>
+            <th>NIM</th><th>Nama</th>
+            <th class="num">Tugas</th><th class="num">Praktik</th><th class="num">UTS</th><th class="num">UAS</th><th class="num">Absen</th>
+            <th class="num">NA</th><th>Huruf</th><th style="width:54px;">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="field-hint" style="margin-top:12px;">Baris dengan warna kuning berarti ada perubahan yang belum disimpan. Klik ikon centang pada baris, atau gunakan "Simpan Semua Perubahan" di atas.</div>
+  </div>
+
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+const user = Shell.mount({ active: "nilai", eyebrow: "Pekerjaan Inti", title: "Input Nilai", roles: ["admin", "dosen"] });
+
+let PENGATURAN = null;
+let MHS_LIST = [];
+let EXISTING_NILAI = {};
+
+async function init() {
+  try {
+    PENGATURAN = await Api("getPengaturan", {});
+    document.getElementById("bobotChip").innerHTML =
+      `Bobot saat ini — Tugas ${PENGATURAN.bobot_tugas}% · Praktik ${PENGATURAN.bobot_praktik}% · UTS ${PENGATURAN.bobot_uts}% · UAS ${PENGATURAN.bobot_uas}% · Absen ${PENGATURAN.bobot_absen}%`;
+
+    const mkList = await Api("mataKuliahUntukNilai", { role: user.role, ref_id: user.ref_id });
+    const sel = document.getElementById("selMk");
+    if (!mkList.length) {
+      sel.innerHTML = `<option value="">— Belum ada mata kuliah ditugaskan —</option>`;
+    } else {
+      sel.innerHTML = `<option value="">— Pilih mata kuliah —</option>` +
+        mkList.map(m => `<option value="${escapeHtml(m.kode_mk)}" data-semester="${m.semester}" data-nama="${escapeHtml(m.nama_mk)}">${escapeHtml(m.kode_mk)} — ${escapeHtml(m.nama_mk)} (${m.sks} SKS)</option>`).join("");
+    }
+
+    MHS_LIST = await Api("listMahasiswa", {});
+  } catch (err) { showErr(err); }
+}
+
+document.getElementById("selMk").addEventListener("change", () => {
+  const opt = document.getElementById("selMk").selectedOptions[0];
+  if (opt && opt.value) document.getElementById("selSemester").value = opt.dataset.semester;
+  loadTabel();
+});
+document.getElementById("selTahun").addEventListener("change", loadTabel);
+document.getElementById("selSemester").addEventListener("change", loadTabel);
+
+async function loadTabel() {
+  const kodeMk = document.getElementById("selMk").value;
+  const tahun = document.getElementById("selTahun").value.trim();
+  const semester = document.getElementById("selSemester").value;
+  const cardTabel = document.getElementById("cardTabel");
+
+  if (!kodeMk || !tahun || !semester) { cardTabel.style.display = "none"; return; }
+
+  const opt = document.getElementById("selMk").selectedOptions[0];
+  document.getElementById("judulMk").textContent = opt.dataset.nama;
+  document.getElementById("subJudulMk").textContent = `Tahun Ajaran ${tahun} · Semester ke-${semester}`;
+
+  cardTabel.style.display = "";
+  const tbody = document.getElementById("tbody");
+  setLoading(tbody, 10);
+
+  try {
+    const nilaiRows = await Api("listNilai", { kode_mk: kodeMk });
+    EXISTING_NILAI = {};
+    nilaiRows.forEach(r => { if (String(r.tahun_ajaran) === tahun) EXISTING_NILAI[r.nim] = r; });
+
+    if (!MHS_LIST.length) { setEmpty(tbody, 10, "Belum ada data mahasiswa. Tambahkan dahulu pada menu Mahasiswa."); return; }
+
+    tbody.innerHTML = MHS_LIST.map(m => rowHtml(m)).join("");
+    MHS_LIST.forEach(m => attachRowEvents(m.nim));
+  } catch (err) { showErr(err); setEmpty(tbody, 10, "Gagal memuat data."); }
+}
+
+function rowHtml(m) {
+  const ex = EXISTING_NILAI[m.nim] || {};
+  const v = (x) => (x === undefined || x === null || x === "" ? "" : x);
+  return `
+    <tr data-nim="${escapeHtml(m.nim)}">
+      <td class="mono">${escapeHtml(m.nim)}</td>
+      <td>${escapeHtml(m.nama)}</td>
+      <td class="num"><input type="number" min="0" max="100" class="cell-input" data-f="tugas" value="${v(ex.nilai_tugas)}"></td>
+      <td class="num"><input type="number" min="0" max="100" class="cell-input" data-f="praktik" value="${v(ex.nilai_praktik)}"></td>
+      <td class="num"><input type="number" min="0" max="100" class="cell-input" data-f="uts" value="${v(ex.nilai_uts)}"></td>
+      <td class="num"><input type="number" min="0" max="100" class="cell-input" data-f="uas" value="${v(ex.nilai_uas)}"></td>
+      <td class="num"><input type="number" min="0" max="100" class="cell-input" data-f="absen" value="${v(ex.nilai_absen)}"></td>
+      <td class="num na-cell">${ex.nilai_akhir != null ? fmtNum(ex.nilai_akhir) : "—"}</td>
+      <td class="huruf-cell">${ex.huruf ? badgeHuruf(ex.huruf) : "—"}</td>
+      <td><button class="icon-btn" title="Simpan baris ini" onclick="simpanBaris('${escapeHtml(m.nim)}')">${ICON.save}</button></td>
+    </tr>`;
+}
+
+function attachRowEvents(nim) {
+  const tr = document.querySelector(`tr[data-nim="${CSS.escape(nim)}"]`);
+  if (!tr) return;
+  tr.querySelectorAll(".cell-input").forEach(inp => inp.addEventListener("input", () => updatePreview(nim)));
+}
+
+function updatePreview(nim) {
+  const tr = document.querySelector(`tr[data-nim="${CSS.escape(nim)}"]`);
+  const get = (f) => Number(tr.querySelector(`[data-f="${f}"]`).value) || 0;
+  const komponen = { tugas: get("tugas"), praktik: get("praktik"), uts: get("uts"), uas: get("uas"), absen: get("absen") };
+  const bobot = { tugas: PENGATURAN.bobot_tugas, praktik: PENGATURAN.bobot_praktik, uts: PENGATURAN.bobot_uts, uas: PENGATURAN.bobot_uas, absen: PENGATURAN.bobot_absen };
+  const na = hitungNilaiAkhir(komponen, bobot);
+  const skala = { a: PENGATURAN.skala_a, b: PENGATURAN.skala_b, c: PENGATURAN.skala_c, d: PENGATURAN.skala_d };
+  const hasil = tentukanHuruf(na, skala);
+  tr.querySelector(".na-cell").textContent = fmtNum(na);
+  tr.querySelector(".huruf-cell").innerHTML = badgeHuruf(hasil.huruf);
+  tr.classList.add("dirty");
+}
+
+async function simpanBaris(nim) {
+  const kodeMk = document.getElementById("selMk").value;
+  const tahun = document.getElementById("selTahun").value.trim();
+  const semester = document.getElementById("selSemester").value;
+  const tr = document.querySelector(`tr[data-nim="${CSS.escape(nim)}"]`);
+  const get = (f) => tr.querySelector(`[data-f="${f}"]`).value;
+  try {
+    const hasil = await Api("simpanNilai", {
+      nim, kode_mk: kodeMk, tahun_ajaran: tahun, semester_ke: semester,
+      nilai_tugas: get("tugas"), nilai_praktik: get("praktik"), nilai_uts: get("uts"), nilai_uas: get("uas"), nilai_absen: get("absen"),
+    });
+    EXISTING_NILAI[nim] = hasil;
+    tr.classList.remove("dirty");
+    toast(`Nilai ${nim} tersimpan.`);
+  } catch (err) { showErr(err); }
+}
+
+async function simpanSemua() {
+  const dirtyRows = Array.from(document.querySelectorAll("tr.dirty"));
+  if (!dirtyRows.length) { toast("Tidak ada perubahan untuk disimpan.", "err"); return; }
+  const btn = document.getElementById("btnSimpanSemua");
+  btn.disabled = true; btn.textContent = "Menyimpan...";
+  let sukses = 0;
+  for (const tr of dirtyRows) {
+    try { await simpanBaris(tr.dataset.nim); sukses++; } catch (e) { /* lanjut baris lain */ }
+  }
+  btn.disabled = false; btn.textContent = "Simpan Semua Perubahan";
+  toast(`${sukses} dari ${dirtyRows.length} baris berhasil disimpan.`);
+}
+document.getElementById("btnSimpanSemua").addEventListener("click", simpanSemua);
+
+init();
+</script>
+</body>
+</html>

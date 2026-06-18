@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Generate IP / IPK — Buku Induk</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<div id="page-root" hidden>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <h3>Generate IP / IPK</h3>
+        <div class="desc">Hitung ulang Indeks Prestasi Semester (IPS) dan Indeks Prestasi Kumulatif (IPK) berdasarkan nilai yang sudah diinput dosen. Aman dijalankan berulang kali — data lama otomatis diperbarui, bukan digandakan.</div>
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="field full">
+        <label>Mahasiswa</label>
+        <select id="selMhs"><option value="">— Pilih mahasiswa —</option></select>
+      </div>
+      <div class="field full">
+        <label>Semester Ke-</label>
+        <select id="selSemester"><option value="">— Pilih mahasiswa dahulu —</option></select>
+      </div>
+    </div>
+    <div style="margin-top:10px;">
+      <button class="btn btn-primary" id="btnGenerate" disabled>Generate IPS / IPK</button>
+    </div>
+
+    <div id="hasilWrap" style="display:none;margin-top:24px;border-top:1px dashed var(--parchment-200);padding-top:20px;">
+      <div class="stamp-wrap" id="hasilStamp"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <h3>Riwayat IP / IPK Seluruh Mahasiswa</h3>
+        <div class="desc">Rekap seluruh hasil generate yang sudah pernah dilakukan, terbaru sesuai semester.</div>
+      </div>
+      <div class="card-tools">
+        <div class="search-box">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.7-4.7"/></svg>
+          <input type="text" id="searchBox" placeholder="Cari NIM / nama...">
+        </div>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="ledger">
+        <thead>
+          <tr><th>NIM</th><th>Nama</th><th class="num">Smt</th><th>Tahun Ajaran</th><th class="num">SKS Smt</th><th class="num">IPS</th><th class="num">SKS Kum.</th><th class="num">IPK</th><th>Status</th></tr>
+        </thead>
+        <tbody id="tbodyRiwayat"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+const user = Shell.mount({ active: "generate", eyebrow: "Proses Akademik", title: "Generate IP / IPK", roles: ["admin"] });
+
+let MHS_LIST = [];
+let RIWAYAT_ALL = [];
+
+async function init() {
+  try {
+    MHS_LIST = await Api("listMahasiswa", {});
+    const sel = document.getElementById("selMhs");
+    sel.innerHTML = `<option value="">— Pilih mahasiswa —</option>` +
+      MHS_LIST.map(m => `<option value="${escapeHtml(m.nim)}">${escapeHtml(m.nim)} — ${escapeHtml(m.nama)}</option>`).join("");
+    await loadRiwayat();
+  } catch (err) { showErr(err); }
+}
+
+document.getElementById("selMhs").addEventListener("change", onMhsChange);
+
+async function onMhsChange() {
+  const nim = document.getElementById("selMhs").value;
+  const selSem = document.getElementById("selSemester");
+  document.getElementById("hasilWrap").style.display = "none";
+  document.getElementById("btnGenerate").disabled = true;
+  if (!nim) { selSem.innerHTML = `<option value="">— Pilih mahasiswa dahulu —</option>`; return; }
+  selSem.innerHTML = `<option value="">Memuat...</option>`;
+  try {
+    const semList = await Api("semesterTersedia", { nim });
+    if (!semList.length) {
+      selSem.innerHTML = `<option value="">— Belum ada nilai diinput untuk mahasiswa ini —</option>`;
+      return;
+    }
+    selSem.innerHTML = semList.map(s => `<option value="${s.semester_ke}">Semester ${s.semester_ke} (${escapeHtml(s.tahun_ajaran)})</option>`).join("");
+    document.getElementById("btnGenerate").disabled = false;
+  } catch (err) { showErr(err); }
+}
+
+document.getElementById("btnGenerate").addEventListener("click", async () => {
+  const nim = document.getElementById("selMhs").value;
+  const semester = document.getElementById("selSemester").value;
+  if (!nim || !semester) return;
+  const btn = document.getElementById("btnGenerate");
+  btn.disabled = true; btn.textContent = "Memproses...";
+  try {
+    const hasil = await Api("generateIPS", { nim, semester_ke: semester });
+    const kind = hasil.ipk >= 3.51 ? "ok" : hasil.ipk >= 2 ? "neutral" : "bad";
+    document.getElementById("hasilStamp").innerHTML = `
+      ${renderStamp({ value: fmtNum(hasil.ipk), kind })}
+      <div class="stamp-caption">
+        <strong>Hasil Generate — Semester ${hasil.semester_ke}</strong>
+        IPS semester ini: <b>${fmtNum(hasil.ips)}</b> (SKS semester: ${hasil.sks_semester})<br>
+        IPK kumulatif: <b>${fmtNum(hasil.ipk)}</b> (Total SKS: ${hasil.sks_kumulatif})<br>
+        Status: <b>${escapeHtml(hasil.status_kelulusan)}</b>
+      </div>`;
+    document.getElementById("hasilWrap").style.display = "";
+    toast("IPS/IPK berhasil digenerate.");
+    await loadRiwayat();
+  } catch (err) { showErr(err); }
+  finally { btn.disabled = false; btn.textContent = "Generate IPS / IPK"; }
+});
+
+async function loadRiwayat() {
+  const tbody = document.getElementById("tbodyRiwayat");
+  setLoading(tbody, 9);
+  try {
+    RIWAYAT_ALL = await Api("riwayatSemua", {});
+    renderRiwayat();
+  } catch (err) { showErr(err); setEmpty(tbody, 9, "Gagal memuat data."); }
+}
+
+function renderRiwayat() {
+  const q = document.getElementById("searchBox").value.trim().toLowerCase();
+  const rows = RIWAYAT_ALL.filter(r => !q || String(r.nim).toLowerCase().includes(q) || String(r.nama_mahasiswa).toLowerCase().includes(q));
+  const tbody = document.getElementById("tbodyRiwayat");
+  if (!rows.length) return setEmpty(tbody, 9, "Belum ada riwayat IP/IPK yang digenerate.");
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td class="mono">${escapeHtml(r.nim)}</td>
+      <td>${escapeHtml(r.nama_mahasiswa)}</td>
+      <td class="num">${r.semester_ke}</td>
+      <td class="mono">${escapeHtml(r.tahun_ajaran)}</td>
+      <td class="num">${r.sks_semester}</td>
+      <td class="num">${fmtNum(r.ips)}</td>
+      <td class="num">${r.sks_kumulatif}</td>
+      <td class="num">${fmtNum(r.ipk)}</td>
+      <td>${escapeHtml(r.status_kelulusan)}</td>
+    </tr>
+  `).join("");
+}
+document.getElementById("searchBox").addEventListener("input", renderRiwayat);
+
+init();
+</script>
+</body>
+</html>

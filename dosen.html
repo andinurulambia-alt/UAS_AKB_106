@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Data Dosen — Buku Induk</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<div id="page-root" hidden>
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <h3>Data Dosen</h3>
+        <div class="desc">Master data dosen pengampu mata kuliah beserta akun login portal.</div>
+      </div>
+      <div class="card-tools">
+        <div class="search-box">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.7-4.7"/></svg>
+          <input type="text" id="searchBox" placeholder="Cari NIDN / nama...">
+        </div>
+        <button class="btn btn-primary" id="btnTambah">+ Tambah Dosen</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="ledger">
+        <thead><tr><th>NIDN</th><th>Nama</th><th>Email</th><th>No. HP</th><th style="width:90px;">Aksi</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalForm">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modalTitle">Tambah Dosen</h3>
+      <button class="modal-close" id="btnCloseModal">&times;</button>
+    </div>
+    <form id="formDosen">
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="field full">
+            <label>NIDN</label>
+            <input type="text" id="f_nidn" required>
+          </div>
+          <div class="field full">
+            <label>Nama Lengkap (dengan gelar)</label>
+            <input type="text" id="f_nama" required>
+          </div>
+          <div class="field">
+            <label>Email</label>
+            <input type="email" id="f_email">
+          </div>
+          <div class="field">
+            <label>No. HP</label>
+            <input type="text" id="f_no_hp">
+          </div>
+        </div>
+
+        <div class="divider-label">Akun Login Portal (opsional)</div>
+        <div class="form-grid">
+          <div class="field">
+            <label>Username</label>
+            <input type="text" id="f_username" placeholder="contoh: nama depan">
+          </div>
+          <div class="field">
+            <label>Password</label>
+            <input type="text" id="f_password" placeholder="Kosongkan jika tidak diubah">
+          </div>
+        </div>
+        <div class="field-hint">Isi untuk membuat/memperbarui akun login dosen ini. Akun inilah yang nanti dipakai dosen untuk masuk dan menginput nilai mata kuliah yang diampunya.</div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-outline" id="btnBatal">Batal</button>
+        <button type="submit" class="btn btn-primary" id="btnSimpan">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+const user = Shell.mount({ active: "dosen", eyebrow: "Manajemen Data", title: "Data Dosen", roles: ["admin"] });
+document.getElementById("btnTambah").innerHTML = `${ICON.plus}Tambah Dosen`;
+
+let DATA = [];
+
+async function loadData() {
+  const tbody = document.getElementById("tbody");
+  setLoading(tbody, 5);
+  try {
+    DATA = await Api("listDosen", {});
+    render();
+  } catch (err) { showErr(err); setEmpty(tbody, 5, "Gagal memuat data."); }
+}
+
+function render() {
+  const q = document.getElementById("searchBox").value.trim().toLowerCase();
+  const rows = DATA.filter(r => !q || String(r.nidn).toLowerCase().includes(q) || String(r.nama).toLowerCase().includes(q));
+  const tbody = document.getElementById("tbody");
+  if (!rows.length) return setEmpty(tbody, 5, "Tidak ada data dosen.");
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td class="mono">${escapeHtml(r.nidn)}</td>
+      <td>${escapeHtml(r.nama)}</td>
+      <td>${escapeHtml(r.email)}</td>
+      <td class="mono">${escapeHtml(r.no_hp)}</td>
+      <td>
+        <div class="row-actions">
+          <button class="icon-btn" title="Ubah" onclick='openForm(${JSON.stringify(r).replace(/'/g, "&#39;")})'>${ICON.edit}</button>
+          <button class="icon-btn danger" title="Hapus" onclick="hapus('${escapeHtml(r.nidn)}')">${ICON.trash}</button>
+        </div>
+      </td>
+    </tr>
+  `).join("");
+}
+
+document.getElementById("searchBox").addEventListener("input", render);
+
+function openForm(data) {
+  document.getElementById("formDosen").reset();
+  document.getElementById("f_nidn").value = data ? data.nidn : "";
+  document.getElementById("f_nidn").disabled = !!data;
+  document.getElementById("f_nama").value = data ? data.nama : "";
+  document.getElementById("f_email").value = data ? data.email : "";
+  document.getElementById("f_no_hp").value = data ? data.no_hp : "";
+  document.getElementById("f_username").value = "";
+  document.getElementById("f_password").value = "";
+  document.getElementById("modalTitle").textContent = data ? "Ubah Data Dosen" : "Tambah Dosen";
+  openModal("modalForm");
+}
+
+document.getElementById("btnTambah").addEventListener("click", () => openForm(null));
+document.getElementById("btnCloseModal").addEventListener("click", () => closeModal("modalForm"));
+document.getElementById("btnBatal").addEventListener("click", () => closeModal("modalForm"));
+
+document.getElementById("formDosen").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById("btnSimpan");
+  btn.disabled = true; btn.textContent = "Menyimpan...";
+  try {
+    await Api("simpanDosen", {
+      nidn: document.getElementById("f_nidn").value.trim(),
+      nama: document.getElementById("f_nama").value.trim(),
+      email: document.getElementById("f_email").value.trim(),
+      no_hp: document.getElementById("f_no_hp").value.trim(),
+      username: document.getElementById("f_username").value.trim(),
+      password: document.getElementById("f_password").value,
+    });
+    toast("Data dosen berhasil disimpan.");
+    closeModal("modalForm");
+    loadData();
+  } catch (err) { showErr(err); }
+  finally { btn.disabled = false; btn.textContent = "Simpan"; }
+});
+
+async function hapus(nidn) {
+  const ok = await confirmDialog(`Hapus data dosen NIDN ${nidn}? Tindakan ini tidak dapat dibatalkan.`, { title: "Hapus Dosen" });
+  if (!ok) return;
+  try {
+    await Api("hapusDosen", { nidn });
+    toast("Data dosen dihapus.");
+    loadData();
+  } catch (err) { showErr(err); }
+}
+
+loadData();
+</script>
+</body>
+</html>

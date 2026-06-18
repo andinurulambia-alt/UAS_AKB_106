@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Masuk — Buku Induk SIA Administrasi Perkantoran</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<div class="login-screen">
+  <div>
+    <div class="login-mark">
+      <div class="crest">BI</div>
+      <div class="eyebrow">Sistem Informasi Akademik</div>
+      <h1>Buku Induk</h1>
+      <p>Program Studi Administrasi Perkantoran</p>
+    </div>
+
+    <div class="login-card">
+      <div class="login-alert" id="loginAlert"></div>
+      <form id="loginForm" autocomplete="off">
+        <div class="field">
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username" placeholder="contoh: admin" required>
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" placeholder="••••••••" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="btnMasuk">Masuk</button>
+      </form>
+
+      <div class="demo-accounts">
+        <strong>Akun contoh (dari template spreadsheet):</strong><br>
+        Admin &nbsp;→&nbsp; admin / admin123<br>
+        Dosen &nbsp;→&nbsp; dosen1 / dosen123<br>
+        Mahasiswa &nbsp;→&nbsp; 2024010 / mhs123
+      </div>
+    </div>
+
+    <div class="login-foot">© Prodi Administrasi Perkantoran — Sistem Informasi Akademik Buku Induk</div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+  // jika sudah login, langsung lempar ke dashboard
+  if (Session.get()) window.location.href = "dashboard.html";
+
+  const form = document.getElementById("loginForm");
+  const alertBox = document.getElementById("loginAlert");
+  const btn = document.getElementById("btnMasuk");
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    alertBox.style.display = "none";
+    btn.disabled = true;
+    btn.textContent = "Memeriksa...";
+    try {
+      const username = document.getElementById("username").value.trim();
+      const password = document.getElementById("password").value;
+      const user = await Api("login", { username, password });
+      Session.set(user);
+      window.location.href = "dashboard.html";
+    } catch (err) {
+      alertBox.textContent = err.message || "Login gagal.";
+      alertBox.style.display = "block";
+      btn.disabled = false;
+      btn.textContent = "Masuk";
+    }
+  });
+</script>
+</body>
+</html>

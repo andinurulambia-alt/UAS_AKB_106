@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pengaturan Nilai — Buku Induk</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<div id="page-root" hidden>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <h3>Bobot Komponen Nilai</h3>
+        <div class="desc">Bobot ini dipakai untuk menghitung Nilai Akhir (NA) setiap mata kuliah. Total bobot tidak harus 100 — sistem otomatis menormalkan hasil akhir tetap dalam skala 0–100.</div>
+      </div>
+    </div>
+    <form id="formBobot">
+      <div class="form-grid">
+        <div class="field">
+          <label>Tugas (%)</label>
+          <input type="number" id="b_tugas" min="0" max="100" step="0.5" required>
+        </div>
+        <div class="field">
+          <label>Praktik (%)</label>
+          <input type="number" id="b_praktik" min="0" max="100" step="0.5" required>
+        </div>
+        <div class="field">
+          <label>UTS (%)</label>
+          <input type="number" id="b_uts" min="0" max="100" step="0.5" required>
+        </div>
+        <div class="field">
+          <label>UAS (%)</label>
+          <input type="number" id="b_uas" min="0" max="100" step="0.5" required>
+        </div>
+        <div class="field">
+          <label>Absen (%)</label>
+          <input type="number" id="b_absen" min="0" max="100" step="0.5" required>
+        </div>
+      </div>
+      <div class="weight-chip" id="totalChip" style="margin-top:6px;">Total bobot: <b id="totalVal">0</b></div>
+
+      <div class="divider-label">Skala Nilai Huruf (ambang batas minimum)</div>
+      <div class="form-grid">
+        <div class="field">
+          <label>Minimum untuk A</label>
+          <input type="number" id="s_a" min="0" max="100" required>
+        </div>
+        <div class="field">
+          <label>Minimum untuk B</label>
+          <input type="number" id="s_b" min="0" max="100" required>
+        </div>
+        <div class="field">
+          <label>Minimum untuk C</label>
+          <input type="number" id="s_c" min="0" max="100" required>
+        </div>
+        <div class="field">
+          <label>Minimum untuk D (di bawahnya = E)</label>
+          <input type="number" id="s_d" min="0" max="100" required>
+        </div>
+      </div>
+      <div class="field-hint">Mahasiswa dengan huruf <b>E</b> dianggap <b>Tidak Lulus</b> pada mata kuliah tersebut dan tidak menyumbang nilai positif pada IP/IPK (bobot 0).</div>
+
+      <div style="margin-top:18px;">
+        <button type="submit" class="btn btn-primary" id="btnSimpan">Simpan Pengaturan</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h3>Cara Kerja Rumus</h3></div>
+    <div class="kv-list">
+      <div class="row"><span class="k">Nilai Akhir (NA)</span><span class="v" style="font-family:var(--font-mono);font-weight:500;">Σ(komponen × bobot) ÷ total bobot</span></div>
+      <div class="row"><span class="k">Huruf → Bobot Huruf</span><span class="v">A=4, B=3, C=2, D=1, E=0</span></div>
+      <div class="row"><span class="k">IPS (semester)</span><span class="v">Σ(bobot huruf × SKS) ÷ Σ SKS — mata kuliah semester tersebut</span></div>
+      <div class="row"><span class="k">IPK (kumulatif)</span><span class="v">Σ(bobot huruf × SKS) ÷ Σ SKS — seluruh mata kuliah s.d. semester terpilih</span></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+const user = Shell.mount({ active: "pengaturan", eyebrow: "Konfigurasi", title: "Pengaturan Nilai", roles: ["admin"] });
+
+const ids = ["b_tugas","b_praktik","b_uts","b_uas","b_absen","s_a","s_b","s_c","s_d"];
+
+function updateTotal() {
+  const total = ["b_tugas","b_praktik","b_uts","b_uas","b_absen"]
+    .reduce((sum, id) => sum + (Number(document.getElementById(id).value) || 0), 0);
+  document.getElementById("totalVal").textContent = total;
+}
+ids.slice(0,5).forEach(id => document.getElementById(id).addEventListener("input", updateTotal));
+
+async function load() {
+  try {
+    const p = await Api("getPengaturan", {});
+    document.getElementById("b_tugas").value = p.bobot_tugas;
+    document.getElementById("b_praktik").value = p.bobot_praktik;
+    document.getElementById("b_uts").value = p.bobot_uts;
+    document.getElementById("b_uas").value = p.bobot_uas;
+    document.getElementById("b_absen").value = p.bobot_absen;
+    document.getElementById("s_a").value = p.skala_a;
+    document.getElementById("s_b").value = p.skala_b;
+    document.getElementById("s_c").value = p.skala_c;
+    document.getElementById("s_d").value = p.skala_d;
+    updateTotal();
+  } catch (err) { showErr(err); }
+}
+
+document.getElementById("formBobot").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById("btnSimpan");
+  btn.disabled = true; btn.textContent = "Menyimpan...";
+  try {
+    await Api("updatePengaturan", {
+      bobot_tugas: document.getElementById("b_tugas").value,
+      bobot_praktik: document.getElementById("b_praktik").value,
+      bobot_uts: document.getElementById("b_uts").value,
+      bobot_uas: document.getElementById("b_uas").value,
+      bobot_absen: document.getElementById("b_absen").value,
+      skala_a: document.getElementById("s_a").value,
+      skala_b: document.getElementById("s_b").value,
+      skala_c: document.getElementById("s_c").value,
+      skala_d: document.getElementById("s_d").value,
+    });
+    toast("Pengaturan nilai berhasil disimpan.");
+  } catch (err) { showErr(err); }
+  finally { btn.disabled = false; btn.textContent = "Simpan Pengaturan"; }
+});
+
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dasbor — Buku Induk</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<div id="page-root" hidden>
+
+  <div id="adminDash" style="display:none">
+    <div class="stat-grid" id="statGrid"></div>
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h3>Selamat datang di Buku Induk</h3>
+          <div class="desc">Pintasan cepat untuk pekerjaan administrasi akademik yang paling sering dilakukan.</div>
+        </div>
+      </div>
+      <div class="kv-list" id="adminLinks"></div>
+    </div>
+  </div>
+
+  <div id="dosenDash" style="display:none">
+    <div class="stat-grid" id="dosenStatGrid"></div>
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h3>Mata Kuliah yang Diampu</h3>
+          <div class="desc">Pilih salah satu untuk langsung menuju halaman input nilai.</div>
+        </div>
+        <div class="card-tools"><a href="nilai.html" class="btn btn-brass btn-sm">Input Nilai →</a></div>
+      </div>
+      <div class="table-wrap">
+        <table class="ledger" id="dosenMkTable">
+          <thead><tr><th>Kode</th><th>Mata Kuliah</th><th class="num">SKS</th><th class="num">Semester</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="mhsDash" style="display:none">
+    <div class="card" id="mhsStampCard">
+      <div class="card-head">
+        <div><h3>Ringkasan Akademik</h3><div class="desc">Berdasarkan hasil generate IP/IPK terakhir.</div></div>
+        <div class="card-tools"><a href="transkrip.html" class="btn btn-outline btn-sm">Lihat Transkrip Lengkap →</a></div>
+      </div>
+      <div class="stamp-wrap" id="mhsStampWrap"></div>
+    </div>
+    <div class="card" id="mhsRiwayatCard">
+      <div class="card-head"><h3>Riwayat Per Semester</h3></div>
+      <div class="table-wrap">
+        <table class="ledger" id="mhsRiwayatTable">
+          <thead><tr><th>Semester</th><th>Tahun Ajaran</th><th class="num">SKS</th><th class="num">IPS</th><th class="num">IPK</th><th>Status</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+const user = Shell.mount({ active: "dashboard", eyebrow: "Ringkasan", title: "Dasbor" });
+
+(async () => {
+  if (!user) return;
+  try {
+    const stats = await Api("dashboardStats", { role: user.role, ref_id: user.ref_id });
+
+    if (user.role === "admin") {
+      document.getElementById("adminDash").style.display = "";
+      document.getElementById("statGrid").innerHTML = `
+        <div class="stat-card"><div class="label">Mahasiswa</div><div class="value">${stats.totalMahasiswa}</div></div>
+        <div class="stat-card"><div class="label">Dosen</div><div class="value">${stats.totalDosen}</div></div>
+        <div class="stat-card"><div class="label">Staf</div><div class="value">${stats.totalStaf}</div></div>
+        <div class="stat-card"><div class="label">Mata Kuliah</div><div class="value">${stats.totalMataKuliah}</div></div>
+        <div class="stat-card"><div class="label">Nilai Diinput</div><div class="value">${stats.totalNilaiDiinput}</div></div>
+        <div class="stat-card"><div class="label">Rata-rata IPK</div><div class="value">${fmtNum(stats.rataIpk)}</div></div>
+      `;
+      document.getElementById("adminLinks").innerHTML = `
+        <div class="row"><span class="k">Kelola data mahasiswa, dosen, staf &amp; mata kuliah</span><span class="v"><a href="mahasiswa.html">Buka →</a></span></div>
+        <div class="row"><span class="k">Atur bobot komponen nilai &amp; skala huruf</span><span class="v"><a href="pengaturan.html">Buka →</a></span></div>
+        <div class="row"><span class="k">Generate IP dan IPK mahasiswa</span><span class="v"><a href="generate.html">Buka →</a></span></div>
+        <div class="row"><span class="k">Lihat transkrip mahasiswa</span><span class="v"><a href="transkrip.html">Buka →</a></span></div>
+      `;
+    }
+
+    else if (user.role === "dosen") {
+      document.getElementById("dosenDash").style.display = "";
+      document.getElementById("dosenStatGrid").innerHTML = `
+        <div class="stat-card"><div class="label">Mata Kuliah Diampu</div><div class="value">${stats.totalMataKuliah}</div></div>
+        <div class="stat-card"><div class="label">Mahasiswa Dinilai</div><div class="value">${stats.totalMahasiswaDinilai}</div></div>
+        <div class="stat-card"><div class="label">Total Nilai Diinput</div><div class="value">${stats.totalNilaiDiinput}</div></div>
+      `;
+      const tbody = document.querySelector("#dosenMkTable tbody");
+      if (!stats.mataKuliah.length) {
+        setEmpty(tbody, 4, "Belum ada mata kuliah yang ditugaskan ke akun ini.");
+      } else {
+        tbody.innerHTML = stats.mataKuliah.map(m => `
+          <tr><td class="mono">${escapeHtml(m.kode_mk)}</td><td>${escapeHtml(m.nama_mk)}</td><td class="num">${m.sks}</td><td class="num">${m.semester}</td></tr>
+        `).join("");
+      }
+    }
+
+    else if (user.role === "mahasiswa") {
+      document.getElementById("mhsDash").style.display = "";
+      if (stats.semesterTerakhir === null) {
+        document.getElementById("mhsStampWrap").innerHTML = `
+          <div class="empty-state" style="padding:10px 0;">
+            <h4>Belum ada IP/IPK yang digenerate</h4>
+            <div>Nilai semester pertama belum digenerate oleh admin. Periksa kembali setelah dosen menginput seluruh komponen nilai.</div>
+          </div>`;
+        document.getElementById("mhsRiwayatCard").style.display = "none";
+      } else {
+        const ipk = stats.ipkTerakhir;
+        const kind = ipk >= 3.51 ? "ok" : ipk >= 2 ? "neutral" : "bad";
+        document.getElementById("mhsStampWrap").innerHTML = `
+          ${renderStamp({ value: fmtNum(ipk), kind })}
+          <div class="stamp-caption">
+            <strong>IPK Kumulatif s.d. Semester ${stats.semesterTerakhir}</strong>
+            IPS semester terakhir: <b>${fmtNum(stats.ipsTerakhir)}</b><br>
+            Total SKS kumulatif: <b>${stats.sksKumulatif}</b><br>
+            Status: <b>${escapeHtml(stats.statusKelulusan || "—")}</b>
+          </div>
+        `;
+        const tbody = document.querySelector("#mhsRiwayatTable tbody");
+        tbody.innerHTML = stats.riwayat.map(r => `
+          <tr>
+            <td>${r.semester_ke}</td>
+            <td class="mono">${escapeHtml(r.tahun_ajaran)}</td>
+            <td class="num">${r.sks_kumulatif}</td>
+            <td class="num">${fmtNum(r.ips)}</td>
+            <td class="num">${fmtNum(r.ipk)}</td>
+            <td>${escapeHtml(r.status_kelulusan)}</td>
+          </tr>
+        `).join("");
+      }
+    }
+  } catch (err) { showErr(err); }
+})();
+</script>
+</body>
+</html>

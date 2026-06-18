@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transkrip Nilai — Buku Induk</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<div id="page-root" hidden>
+
+  <div class="card no-print" id="cardPicker" style="display:none;">
+    <div class="card-head">
+      <div>
+        <h3>Pilih Mahasiswa</h3>
+        <div class="desc">Pilih mahasiswa untuk melihat transkrip nilai lengkapnya.</div>
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="field full">
+        <select id="selMhs"><option value="">— Pilih mahasiswa —</option></select>
+      </div>
+    </div>
+  </div>
+
+  <div id="hasil" style="display:none;">
+
+    <div class="print-only print-header">
+      <div class="crest-row">
+        <strong style="font-size:18px;">BI</strong>
+      </div>
+      <h2>Transkrip Akademik</h2>
+      <div class="sub">Buku Induk — Sistem Informasi Akademik Prodi Administrasi Perkantoran</div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h3 id="namaMhs">—</h3>
+          <div class="desc" id="infoMhs"></div>
+        </div>
+        <div class="card-tools no-print">
+          <button class="btn btn-outline btn-sm" id="btnCetak">Cetak Transkrip</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="ledger">
+          <thead>
+            <tr>
+              <th>Smt</th><th>Kode</th><th>Mata Kuliah</th><th class="num">SKS</th>
+              <th class="num">Tugas</th><th class="num">Praktik</th><th class="num">UTS</th><th class="num">UAS</th><th class="num">Absen</th>
+              <th class="num">NA</th><th>Huruf</th><th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyNilai"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>Ringkasan IP per Semester</h3></div>
+      <div class="table-wrap">
+        <table class="ledger">
+          <thead><tr><th>Semester</th><th>Tahun Ajaran</th><th class="num">SKS Smt</th><th class="num">IPS</th><th class="num">SKS Kum.</th><th class="num">IPK</th><th>Status</th></tr></thead>
+          <tbody id="tbodyRiwayat"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+const user = Shell.mount({ active: "transkrip", eyebrow: "Akademik", title: "Transkrip Nilai", roles: ["admin", "dosen", "mahasiswa"] });
+
+document.getElementById("btnCetak").addEventListener("click", () => window.print());
+
+async function muatTranskrip(nim) {
+  document.getElementById("hasil").style.display = "none";
+  try {
+    const tr = await Api("transkrip", { nim });
+    document.getElementById("namaMhs").textContent = `${tr.mahasiswa.nama} — ${tr.mahasiswa.nim}`;
+    document.getElementById("infoMhs").textContent = `Angkatan ${tr.mahasiswa.angkatan} · Status: ${tr.mahasiswa.status}`;
+
+    const tbodyNilai = document.getElementById("tbodyNilai");
+    if (!tr.nilai.length) {
+      setEmpty(tbodyNilai, 12, "Belum ada nilai yang diinput.");
+    } else {
+      tbodyNilai.innerHTML = tr.nilai.map(n => `
+        <tr>
+          <td class="num">${n.semester_ke}</td>
+          <td class="mono">${escapeHtml(n.kode_mk)}</td>
+          <td>${escapeHtml(n.nama_mk)}</td>
+          <td class="num">${n.sks}</td>
+          <td class="num">${fmtNum(n.nilai_tugas, 0)}</td>
+          <td class="num">${fmtNum(n.nilai_praktik, 0)}</td>
+          <td class="num">${fmtNum(n.nilai_uts, 0)}</td>
+          <td class="num">${fmtNum(n.nilai_uas, 0)}</td>
+          <td class="num">${fmtNum(n.nilai_absen, 0)}</td>
+          <td class="num">${fmtNum(n.nilai_akhir)}</td>
+          <td>${badgeHuruf(n.huruf)}</td>
+          <td>${badgeStatusLulus(n.status)}</td>
+        </tr>
+      `).join("");
+    }
+
+    const tbodyRiwayat = document.getElementById("tbodyRiwayat");
+    if (!tr.riwayat.length) {
+      setEmpty(tbodyRiwayat, 7, "Belum ada IP/IPK yang digenerate untuk mahasiswa ini.");
+    } else {
+      tbodyRiwayat.innerHTML = tr.riwayat.map(r => `
+        <tr>
+          <td>${r.semester_ke}</td>
+          <td class="mono">${escapeHtml(r.tahun_ajaran)}</td>
+          <td class="num">${r.sks_semester}</td>
+          <td class="num">${fmtNum(r.ips)}</td>
+          <td class="num">${r.sks_kumulatif}</td>
+          <td class="num">${fmtNum(r.ipk)}</td>
+          <td>${escapeHtml(r.status_kelulusan)}</td>
+        </tr>
+      `).join("");
+    }
+
+    document.getElementById("hasil").style.display = "";
+  } catch (err) { showErr(err); }
+}
+
+(async () => {
+  if (user.role === "mahasiswa") {
+    await muatTranskrip(user.ref_id);
+  } else {
+    document.getElementById("cardPicker").style.display = "";
+    try {
+      const mhsList = await Api("listMahasiswa", {});
+      const sel = document.getElementById("selMhs");
+      sel.innerHTML = `<option value="">— Pilih mahasiswa —</option>` +
+        mhsList.map(m => `<option value="${escapeHtml(m.nim)}">${escapeHtml(m.nim)} — ${escapeHtml(m.nama)}</option>`).join("");
+      sel.addEventListener("change", () => { if (sel.value) muatTranskrip(sel.value); else document.getElementById("hasil").style.display = "none"; });
+    } catch (err) { showErr(err); }
+  }
+})();
+</script>
+</body>
+</html>

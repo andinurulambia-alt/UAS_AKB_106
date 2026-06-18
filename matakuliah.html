@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mata Kuliah — Buku Induk</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<div id="page-root" hidden>
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <h3>Mata Kuliah</h3>
+        <div class="desc">Daftar mata kuliah beserta SKS, semester, dan dosen pengampu.</div>
+      </div>
+      <div class="card-tools">
+        <div class="search-box">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.7-4.7"/></svg>
+          <input type="text" id="searchBox" placeholder="Cari kode / nama mata kuliah...">
+        </div>
+        <button class="btn btn-primary" id="btnTambah">+ Tambah Mata Kuliah</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="ledger">
+        <thead><tr><th>Kode</th><th>Nama Mata Kuliah</th><th class="num">SKS</th><th class="num">Semester</th><th>Dosen Pengampu</th><th style="width:90px;">Aksi</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalForm">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modalTitle">Tambah Mata Kuliah</h3>
+      <button class="modal-close" id="btnCloseModal">&times;</button>
+    </div>
+    <form id="formMk">
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="field full">
+            <label>Kode Mata Kuliah</label>
+            <input type="text" id="f_kode_mk" placeholder="contoh: AP101" required>
+          </div>
+          <div class="field full">
+            <label>Nama Mata Kuliah</label>
+            <input type="text" id="f_nama_mk" required>
+          </div>
+          <div class="field">
+            <label>SKS</label>
+            <input type="number" id="f_sks" min="1" max="6" value="2" required>
+          </div>
+          <div class="field">
+            <label>Semester Ke-</label>
+            <input type="number" id="f_semester" min="1" max="14" value="1" required>
+          </div>
+          <div class="field full">
+            <label>Dosen Pengampu</label>
+            <select id="f_nidn_dosen">
+              <option value="">— Belum ditentukan —</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-outline" id="btnBatal">Batal</button>
+        <button type="submit" class="btn btn-primary" id="btnSimpan">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+const user = Shell.mount({ active: "matakuliah", eyebrow: "Manajemen Data", title: "Mata Kuliah", roles: ["admin"] });
+document.getElementById("btnTambah").innerHTML = `${ICON.plus}Tambah Mata Kuliah`;
+
+let DATA = [];
+let DOSEN_LIST = [];
+
+async function loadDosenOptions() {
+  DOSEN_LIST = await Api("listDosen", {});
+  const sel = document.getElementById("f_nidn_dosen");
+  sel.innerHTML = `<option value="">— Belum ditentukan —</option>` +
+    DOSEN_LIST.map(d => `<option value="${escapeHtml(d.nidn)}">${escapeHtml(d.nidn)} — ${escapeHtml(d.nama)}</option>`).join("");
+}
+
+async function loadData() {
+  const tbody = document.getElementById("tbody");
+  setLoading(tbody, 6);
+  try {
+    DATA = await Api("listMataKuliah", {});
+    render();
+  } catch (err) { showErr(err); setEmpty(tbody, 6, "Gagal memuat data."); }
+}
+
+function render() {
+  const q = document.getElementById("searchBox").value.trim().toLowerCase();
+  const rows = DATA.filter(r => !q || String(r.kode_mk).toLowerCase().includes(q) || String(r.nama_mk).toLowerCase().includes(q));
+  const tbody = document.getElementById("tbody");
+  if (!rows.length) return setEmpty(tbody, 6, "Tidak ada data mata kuliah.");
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td class="mono">${escapeHtml(r.kode_mk)}</td>
+      <td>${escapeHtml(r.nama_mk)}</td>
+      <td class="num">${r.sks}</td>
+      <td class="num">${r.semester}</td>
+      <td>${escapeHtml(r.nama_dosen)}</td>
+      <td>
+        <div class="row-actions">
+          <button class="icon-btn" title="Ubah" onclick='openForm(${JSON.stringify(r).replace(/'/g, "&#39;")})'>${ICON.edit}</button>
+          <button class="icon-btn danger" title="Hapus" onclick="hapus('${escapeHtml(r.kode_mk)}')">${ICON.trash}</button>
+        </div>
+      </td>
+    </tr>
+  `).join("");
+}
+
+document.getElementById("searchBox").addEventListener("input", render);
+
+function openForm(data) {
+  document.getElementById("formMk").reset();
+  document.getElementById("f_kode_mk").value = data ? data.kode_mk : "";
+  document.getElementById("f_kode_mk").disabled = !!data;
+  document.getElementById("f_nama_mk").value = data ? data.nama_mk : "";
+  document.getElementById("f_sks").value = data ? data.sks : 2;
+  document.getElementById("f_semester").value = data ? data.semester : 1;
+  document.getElementById("f_nidn_dosen").value = data ? data.nidn_dosen : "";
+  document.getElementById("modalTitle").textContent = data ? "Ubah Mata Kuliah" : "Tambah Mata Kuliah";
+  openModal("modalForm");
+}
+
+document.getElementById("btnTambah").addEventListener("click", () => openForm(null));
+document.getElementById("btnCloseModal").addEventListener("click", () => closeModal("modalForm"));
+document.getElementById("btnBatal").addEventListener("click", () => closeModal("modalForm"));
+
+document.getElementById("formMk").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById("btnSimpan");
+  btn.disabled = true; btn.textContent = "Menyimpan...";
+  try {
+    await Api("simpanMataKuliah", {
+      kode_mk: document.getElementById("f_kode_mk").value.trim(),
+      nama_mk: document.getElementById("f_nama_mk").value.trim(),
+      sks: document.getElementById("f_sks").value,
+      semester: document.getElementById("f_semester").value,
+      nidn_dosen: document.getElementById("f_nidn_dosen").value,
+    });
+    toast("Data mata kuliah berhasil disimpan.");
+    closeModal("modalForm");
+    loadData();
+  } catch (err) { showErr(err); }
+  finally { btn.disabled = false; btn.textContent = "Simpan"; }
+});
+
+async function hapus(kodeMk) {
+  const ok = await confirmDialog(`Hapus mata kuliah ${kodeMk}? Tindakan ini tidak dapat dibatalkan.`, { title: "Hapus Mata Kuliah" });
+  if (!ok) return;
+  try {
+    await Api("hapusMataKuliah", { kode_mk: kodeMk });
+    toast("Mata kuliah dihapus.");
+    loadData();
+  } catch (err) { showErr(err); }
+}
+
+loadDosenOptions().then(loadData);
+</script>
+</body>
+</html>
